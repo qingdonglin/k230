@@ -1,0 +1,10 @@
+# IDE 配置（含本机绝对路径，不入库）
+.vscode/
+
+# Python 运行产物
+__pycache__/
+*.pyc
+
+# 系统/编辑器临时文件
+Thumbs.db
+desktop.ini

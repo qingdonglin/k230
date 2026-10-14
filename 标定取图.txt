@@ -1,0 +1,23 @@
+import os, time
+from media.sensor import *
+from media.display import *
+from media.media import *
+
+W, H = 640, 480          # ← 用你实际跑 AprilTag 的分辨率！
+os.makedirs("/sdcard/calib", exist_ok=True)
+
+sensor = Sensor(width=W, height=H)
+sensor.reset()
+sensor.set_framesize(width=W, height=H)
+sensor.set_pixformat(Sensor.GRAYSCALE)
+sensor.run()
+for _ in range(30):
+    sensor.snapshot()    # 丢帧，等摄像头稳定
+
+n = 0
+while n < 15:
+    img = sensor.snapshot()
+    img.save("/sdcard/calib/img_%02d.jpg" % n)   # 存图
+    print("saved", n)
+    n += 1
+    time.sleep(0.5)      # 每 0.5s 一张，搬动棋盘换角度
