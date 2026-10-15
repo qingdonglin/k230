@@ -1,26 +1,36 @@
-import time
+import time, os, gc
 from media.sensor import *
-from media.display import *      # ← 1. 加这个
+from media.display import *
 from media.media import *
 
-W, H = 320, 240
+W, H = 320, 240                      # ← 和 AprilTag 保持一致
+
 sensor = Sensor(width=W, height=H)
 sensor.reset()
 sensor.set_framesize(width=W, height=H)
-sensor.set_pixformat(Sensor.GRAYSCALE)
+sensor.set_pixformat(Sensor.RGB565)
 
-Display.init(Display.VIRT, width=W, height=H, fps=60, to_ide=False)  # ← 3. 初始化显示(显示到 IDE)
-
+Display.init(Display.VIRT, width=W, height=H, fps=30, to_ide=True)
 sensor.run()
-for _ in range(30):
-    img = sensor.snapshot()
-    Display.show_image(img)           # 稳定阶段也显示
 
-n = 0
-while n < 30:
+# 稳定阶段
+for _ in range(30):
+    os.exitpoint()                   # 稳定阶段也让它可中断
     img = sensor.snapshot()
-    Display.show_image(img)           # ← 每帧显示(实时预览)
-    img.save("/sdcard/img_%02d.jpg" % n)
-    print("saved", n)
-    n += 1
-    time.sleep(1.5)                   # 每 1.5s 存一张，中间搬动棋盘换角度
+    Display.show_image(img)
+
+SAVE_EVERY = 45
+TOTAL = 30
+
+cnt = 0
+n = 0
+while n < TOTAL:
+    os.exitpoint()                   # ★★★ 关键：不加这个，IDE 停不下来 = 卡死 ★★★
+    img = sensor.snapshot()
+    Display.show_image(img)
+    cnt += 1
+    if cnt % SAVE_EVERY == 0:
+        img.save("/sdcard/img_%02d.jpg" % n)   # 没 SD 卡换 "/data/img_%02d.jpg"
+        print("saved", n)
+        n += 1
+    gc.collect()
