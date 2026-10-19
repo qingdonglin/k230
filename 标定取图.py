@@ -3,7 +3,7 @@ from media.sensor import *
 from media.display import *
 from media.media import *
 
-W, H = 320, 240                      # ← 和 AprilTag 保持一致
+W, H = 640, 480                      # ← 和 AprilTag 保持一致
 
 sensor = Sensor(width=W, height=H)
 sensor.reset()
@@ -19,7 +19,7 @@ for _ in range(30):
     img = sensor.snapshot()
     Display.show_image(img)
 
-SAVE_EVERY = 45
+SAVE_EVERY = 130    # 每 N 帧存一张 —— 按你实测帧率调！
 TOTAL = 30
 
 cnt = 0
