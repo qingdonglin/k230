@@ -51,14 +51,12 @@ from media.media import *     # 媒体资源管理（本例未显式调用，随
 # c_y is the image y center position in pixels.
 # 【说明6】c_x / c_y：图像主点（光心）的 x / y 像素坐标。
 
-DETECT_WIDTH  = 640
-DETECT_HEIGHT = 480
-
-# === 标定内参 (仅对 640x480 有效) ===
-f_x = 790.62
-f_y = 790.41
-c_x = 320.36
-c_y = 247.18
+DETECT_WIDTH  = 320
+DETECT_HEIGHT = 240
+f_x = 395.3
+f_y = 395.2
+c_x = 160.2
+c_y = 123.6
 def degrees(radians):
     """弧度 → 角度：角度 = 弧度 × 180 / π"""
     return (180 * radians) / math.pi
@@ -111,7 +109,7 @@ try:
             img.draw_rectangle([v for v in tag.rect()], color=(255, 0, 0))  # 红色矩形框住标签（tag.rect() 返回 4 个角点）
             img.draw_cross(tag.cx(), tag.cy(), color=(0, 255, 0))           # 绿色十字标出标签中心
 
-            size = 0.048                        # 标签真实边长(米)：请按实际打印尺寸修改
+            size = 0.024                        # 标签真实边长(米)：请按实际打印尺寸修改
 
             # 平移 → 米（tag widths × 边长）
             # 库输出的平移量是"标签边长的倍数"，乘真实边长即得到米
