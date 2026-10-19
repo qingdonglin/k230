@@ -1,17 +1,18 @@
-# AprilTags 识别 + UART2 纯文本发送 (distance, y)
+# AprilTags + UART2 二进制帧发送(带校验)  先 y, 后 distance
 import time, math, os, gc, sys
-from machine import UART, FPIOA          # ★ 串口
+import struct                              # ★ 二进制打包
+from machine import UART, FPIOA
 from media.sensor import *
 from media.display import *
 from media.media import *
 
 # ============================================================
-# ① UART2 初始化（和你之前测试用的一致：GPIO11=TX, GPIO12=RX）
+# ① UART2 初始化（GPIO11=TX, GPIO12=RX）
 # ============================================================
 fpioa = FPIOA()
-fpioa.set_function(11, FPIOA.UART2_TXD)  # GPIO11 -> TX2
-fpioa.set_function(12, FPIOA.UART2_RXD)  # GPIO12 -> RX2
-uart = UART(UART.UART2, 115200)          # 串口2, 115200
+fpioa.set_function(11, FPIOA.UART2_TXD)   # GPIO11 -> TX2
+fpioa.set_function(12, FPIOA.UART2_RXD)   # GPIO12 -> RX2
+uart = UART(UART.UART2, 115200)
 
 DETECT_WIDTH  = 320
 DETECT_HEIGHT = 240
@@ -19,7 +20,20 @@ f_x = 395.3
 f_y = 395.2
 c_x = 160.2
 c_y = 123.6
-SIZE = 0.024                             # 半码长(米)
+SIZE = 0.024                              # 半码长(米)
+
+# ============================================================
+# ② 发送一帧: [AA][55][y:4字节][distance:4字节][校验:1字节] = 11字节
+#     - y / distance 都是"小端float"(4字节)
+#     - 校验 = 中间8个数据字节依次异或
+#     - 顺序: 先 y, 后 distance (电控端按同样顺序解)
+# ============================================================
+def send_frame(y, distance):
+    payload = struct.pack('<ff', y, distance)   # 小端, 两个float -> 8字节
+    chk = 0
+    for b in payload:                           # 8字节异或
+        chk ^= b
+    uart.write(bytes([0xAA, 0x55]) + payload + bytes([chk]))
 
 def degrees(radians):
     return (180 * radians) / math.pi
@@ -48,8 +62,8 @@ try:
             ty = tag.y_translation() * SIZE     # 上下(米) -> y
             tz = tag.z_translation() * SIZE     # 距离(米) -> distance
 
-            # ===== 发送 distance(tz) 和 y(ty) =====
-            uart.write(("%.3f,%.3f\n" % (ty, tz)).encode())
+            # ===== 发送: 先 y 后 distance（二进制+校验）=====
+            send_frame(ty, tz)
 
             print("ID:%d  Tx:%.3f Ty:%.3f Tz:%.3f" % (tag.id(), tx, ty, tz))
 
