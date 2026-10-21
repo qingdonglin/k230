@@ -37,7 +37,9 @@ def send_frame(y, distance):
     for b in payload:                           # 8字节异或
         chk ^= b
     uart.write(bytes([0xAA, 0x55]) + payload + bytes([chk])) #最终发出
-
+def degree(radians):
+    """弧度 → 角度：角度 = 弧度 × 180 / π"""
+    return (180 * radians) / math.pi
 def degrees(r):
     # atan2 归一化到 ±180（务必用这个版，不要再出现 271°）
     return math.degrees(math.atan2(math.sin(r), math.cos(r)))
@@ -68,7 +70,7 @@ try:
             ty = tag.y_translation() * SIZE     # 上下(米) -> y
             tz = -tag.z_translation() * SIZE     # 距离(米) -> distance
             # 旋转 → 度（本来就是真实角度，不用乘）
-            rx = degrees(tag.x_rotation())      # 绕 x 轴旋转角(°)
+            rx = degree(tag.x_rotation())-180      # 绕 x 轴旋转角(°)
             ry = degrees(tag.y_rotation())      # 绕 y 轴旋转角(°)
             rz = degrees(tag.z_rotation())      # 绕 z 轴旋转角(°)
 
