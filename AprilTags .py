@@ -14,12 +14,14 @@ fpioa.set_function(11, FPIOA.UART2_TXD)   # GPIO11 -> TX2
 fpioa.set_function(12, FPIOA.UART2_RXD)   # GPIO12 -> RX2
 uart = UART(UART.UART2, 115200)
 
-DETECT_WIDTH  = 320
-DETECT_HEIGHT = 240
-f_x = 395.3   # 焦距x（像素）
-f_y = 395.2   # 焦距y（像素）
-c_x = 160.2   # 光心x（像素）≈ 画面中心
-c_y = 123.6   # 光心y（像素）≈ 画面中心
+DETECT_WIDTH  = 640
+DETECT_HEIGHT = 480
+
+# === 标定内参 (仅对 640x480 有效) ===
+f_x = 790.62
+f_y = 790.41
+c_x = 320.36
+c_y = 247.18
 SIZE = 0.024  # 半码长（米）          
 
 
@@ -51,8 +53,9 @@ try:
     sensor.reset()
     sensor.set_framesize(width = DETECT_WIDTH, height = DETECT_HEIGHT)
     sensor.set_pixformat(Sensor.GRAYSCALE)
-
-    Display.init(Display.VIRT, width = DETECT_WIDTH, height = DETECT_HEIGHT, fps = 60, to_ide = True)
+    #Display.init(Display.VIRT, width = DETECT_WIDTH, height = DETECT_HEIGHT, fps = 60, to_ide = True)只能在 IDE 里显示，不能在屏幕上显示
+    Display.init(Display.ST7701, to_ide=False)#只在小屏上显示
+    #Display.init(Display.ST7701, to_ide=True)#在小屏和ide上一起显示
     sensor.run()
 
     #主循环  核心检测与发送
@@ -79,8 +82,8 @@ try:
             send_frame(ty, tz)
 
             # 打印标签 ID、平移(m) 与旋转角(°)
-            print("ID:%d  Tx:%.3f Ty:%.3f Tz:%.3f  Rx:%.2f Ry:%.2f Rz:%.2f"
-                  % (tag.id(), tx, ty, tz, rx, ry, rz))
+            #print("ID:%d  Tx:%.3f Ty:%.3f Tz:%.3f  Rx:%.2f Ry:%.2f Rz:%.2f"
+             #     % (tag.id(), tx, ty, tz, rx, ry, rz))
 
         Display.show_image(img)
         gc.collect()
