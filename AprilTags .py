@@ -1,17 +1,14 @@
-# AprilTags + UART2 二进制帧发送(带校验)  先 y, 后 distance
+# AprilTags + UART2  发 y, tz(距离), d1(高度差)
 import time, math, os, gc, sys
-import struct                              # ★ 二进制打包
+import struct
 from machine import UART, FPIOA
 from media.sensor import *
 from media.display import *
 from media.media import *
 
-# ============================================================
-# ① UART2 初始化（GPIO11=TX, GPIO12=RX）
-# ============================================================
 fpioa = FPIOA()
-fpioa.set_function(11, FPIOA.UART2_TXD)   # GPIO11 -> TX2
-fpioa.set_function(12, FPIOA.UART2_RXD)   # GPIO12 -> RX2
+fpioa.set_function(11, FPIOA.UART2_TXD)
+fpioa.set_function(12, FPIOA.UART2_RXD)
 uart = UART(UART.UART2, 115200)
 
 DETECT_WIDTH  = 640
@@ -22,73 +19,63 @@ f_x = 790.62
 f_y = 790.41
 c_x = 320.36
 c_y = 247.18
-SIZE = 0.024  # 半码长（米）          
 
+SIZE = 0.024      # 半码长(米) = d/2
+D3   = 0.009        # 码底 → 高台面 距离差(米)
+D2   = 0.0419       # 光心 → 车平台面 高度差(米, 正值)
 
-#二进制帧打包函数 `send_frame`
-# ============================================================
-# ② 发送一帧: [AA][55][y:4字节][distance:4字节][校验:1字节] = 11字节
-#     - y / distance 都是"小端float"(4字节)
-#     - 校验 = 中间8个数据字节依次异或
-#     - 顺序: 先 y, 后 distance (电控端按同样顺序解)
-# ============================================================
-def send_frame(y, distance):
-    payload = struct.pack('<ff', y, distance)   # 小端, 两个float -> 8字节
-    #校验字节，对 **payload 中间 8 个数据字节**逐个异或
+# 帧: [AA][55][y:4B][tz:4B][d1:4B][chk:1B] = 15字节
+def send_frame(y, tz, d1):
+    payload = struct.pack('<fff', y, tz, d1)
     chk = 0
-    for b in payload:                           # 8字节异或
+    for b in payload:
         chk ^= b
-    uart.write(bytes([0xAA, 0x55]) + payload + bytes([chk])) #最终发出
-def degree(radians):
-    """弧度 → 角度：角度 = 弧度 × 180 / π"""
-    return (180 * radians) / math.pi
+    uart.write(bytes([0xAA, 0x55]) + payload + bytes([chk]))
+
+def degree(r):
+    return (180 * r) / math.pi
 def degrees(r):
-    # atan2 归一化到 ±180（务必用这个版，不要再出现 271°）
     return math.degrees(math.atan2(math.sin(r), math.cos(r)))
 
 sensor = None
 try:
-    #传感器初始化
-    sensor = Sensor(width = DETECT_WIDTH, height = DETECT_HEIGHT)
+    sensor = Sensor(width=DETECT_WIDTH, height=DETECT_HEIGHT)
     sensor.reset()
-    sensor.set_framesize(width = DETECT_WIDTH, height = DETECT_HEIGHT)
+    sensor.set_framesize(width=DETECT_WIDTH, height=DETECT_HEIGHT)
     sensor.set_pixformat(Sensor.GRAYSCALE)
-    #Display.init(Display.VIRT, width = DETECT_WIDTH, height = DETECT_HEIGHT, fps = 60, to_ide = True)只能在 IDE 里显示，不能在屏幕上显示
-    Display.init(Display.ST7701, to_ide=False)#只在小屏上显示
-    #Display.init(Display.ST7701, to_ide=True)#在小屏和ide上一起显示
+    #Display.init(Display.ST7701, to_ide=False)
+    Display.init(Display.VIRT, width=DETECT_WIDTH, height=DETECT_HEIGHT, fps=60, to_ide=True)#只ide
     sensor.run()
 
-    #主循环  核心检测与发送
-    fps = time.clock()#fps.tick() 打时间戳用于算帧率；`os.exitpoint()` 响应 IDE 停止信号
+    fps = time.clock()
     while True:
         fps.tick()
         os.exitpoint()
-        img = sensor.snapshot()#抓一张图
+        img = sensor.snapshot()
 
-        for tag in img.find_apriltags(fx=f_x, fy=f_y, cx=c_x, cy=c_y):#`img.find_apriltags(...)` 在图里找所有标签，返回 `tag` 对象列表
+        for tag in img.find_apriltags(fx=f_x, fy=f_y, cx=c_x, cy=c_y):
             img.draw_rectangle([v for v in tag.rect()], color=(255, 0, 0))
             img.draw_cross(tag.cx(), tag.cy(), color=(0, 255, 0))
 
-            tx = tag.x_translation() * SIZE     # 左右(米)
-            ty = tag.y_translation() * SIZE     # 上下(米) -> y
-            tz = -tag.z_translation() * SIZE     # 距离(米) -> distance
-            # 旋转 → 度（本来就是真实角度，不用乘）
-            rx = degree(tag.x_rotation())-180      # 绕 x 轴旋转角(°)
-            ry = degrees(tag.y_rotation())      # 绕 y 轴旋转角(°)
-            rz = degrees(tag.z_rotation())      # 绕 z 轴旋转角(°)
+            tx = tag.x_translation() * SIZE          # 左右
+            ty = tag.y_translation() * SIZE          # 上下(y 正=上)
+            tz = -tag.z_translation() * SIZE         # 距离
+            h_code = ty                              # 码高度(上为正)
+            h_platform = h_code - SIZE - D3          # 平台高度
+            d1 = h_platform + D2                     # 高度差
 
-            
-            # ===== 发送: 先 y 后 distance（二进制+校验）=====
-            send_frame(ty, tz)
+            rx = degree(tag.x_rotation()) - 180
+            ry = degrees(tag.y_rotation())
+            rz = degrees(tag.z_rotation())
 
-            # 打印标签 ID、平移(m) 与旋转角(°)
+            send_frame(ty, tz, d1)                   # ★ 发 y, tz, d1
+            print("tz:%.3f d1:%.4f h_platform:%.4f" % (tz, d1, h_platform))   # 不要就注释
             #print("ID:%d  Tx:%.3f Ty:%.3f Tz:%.3f  Rx:%.2f Ry:%.2f Rz:%.2f"
-             #     % (tag.id(), tx, ty, tz, rx, ry, rz))
-
+            #      % (tag.id(), tx, ty, tz, rx, ry, rz))
         Display.show_image(img)
         gc.collect()
         print(fps.fps())
-except KeyboardInterrupt as e:
+except KeyboardInterrupt:
     print("user stop")
 except BaseException as e:
     print("Exception '%s'" % e)
