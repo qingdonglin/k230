@@ -11,14 +11,12 @@ fpioa.set_function(11, FPIOA.UART2_TXD)
 fpioa.set_function(12, FPIOA.UART2_RXD)
 uart = UART(UART.UART2, 115200)
 
-DETECT_WIDTH  = 640
-DETECT_HEIGHT = 480
-
-# === 标定内参 (仅对 640x480 有效) ===
-f_x = 790.62
-f_y = 790.41
-c_x = 320.36
-c_y = 247.18
+DETECT_WIDTH  = 320
+DETECT_HEIGHT = 240
+f_x = 395.3
+f_y = 395.2
+c_x = 160.2
+c_y = 123.6
 
 SIZE = 0.024      # 半码长(米) = d/2
 D3   = 0.009        # 码底 → 高台面 距离差(米)
@@ -66,15 +64,15 @@ try:
 
             rx = degree(tag.x_rotation()) - 180
             ry = degrees(tag.y_rotation())
-            rz = degrees(tag.z_rotation())
+            rz = -degrees(tag.z_rotation())
 
             send_frame(ty, tz, d1)                   # ★ 发 y, tz, d1
             print("tz:%.3f d1:%.4f h_platform:%.4f" % (tz, d1, h_platform))   # 不要就注释
-            #print("ID:%d  Tx:%.3f Ty:%.3f Tz:%.3f  Rx:%.2f Ry:%.2f Rz:%.2f"
-            #      % (tag.id(), tx, ty, tz, rx, ry, rz))
+            print("ID:%d  Tx:%.3f Ty:%.3f Tz:%.3f  Rx:%.2f Ry:%.2f Rz:%.2f"
+                  % (tag.id(), tx, ty, tz, rx, ry, rz))
         Display.show_image(img)
         gc.collect()
-        print(fps.fps())
+        #print(fps.fps())
 except KeyboardInterrupt:
     print("user stop")
 except BaseException as e:

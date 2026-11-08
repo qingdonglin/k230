@@ -2,7 +2,7 @@ import time, os, gc
 from media.sensor import *
 from media.display import *
 from media.media import *
-#1
+
 W, H = 640, 480                      # ← 和 AprilTag 保持一致
 
 sensor = Sensor(width=W, height=H)

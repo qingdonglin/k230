@@ -1,38 +1,87 @@
-'''
-实验名称：摄像头使用
-实验平台：01Studio CanMV K230
-说明：实现摄像头图像采集显示
-'''
+# AprilTags + UART2  发 y, tz(距离), d1(高度差)
+import time, math, os, gc, sys
+import struct
+from machine import UART, FPIOA
+from media.sensor import *
+from media.display import *
+from media.media import *
 
-import time, os, sys
+fpioa = FPIOA()
+fpioa.set_function(11, FPIOA.UART2_TXD)
+fpioa.set_function(12, FPIOA.UART2_RXD)
+uart = UART(UART.UART2, 115200)
 
-from media.sensor import * #导入sensor模块，使用摄像头相关接口
-from media.display import * #导入display模块，使用display相关接口
-from media.media import * #导入media模块，使用meida相关接口
+DETECT_WIDTH  = 320
+DETECT_HEIGHT = 240
 
-sensor = Sensor() #构建摄像头对象
-sensor.reset() #复位和初始化摄像头
-sensor.set_framesize(Sensor.FHD) #设置帧大小FHD(1920x1080)，默认通道0
-sensor.set_pixformat(Sensor.RGB565) #设置输出图像格式，默认通道0
+f_x = 790.62
+f_y = 790.41
+c_x = 320.36
+c_y = 247.18
 
-#使用IDE缓冲区输出图像,显示尺寸和sensor配置一致。
-Display.init(Display.VIRT, sensor.width(), sensor.height(), to_ide=True)
+SIZE = 0.024      # 半码长(米) = d/2
+D3   = 0.0        # 码底 → 高台面 距离差(米)
+D2   = 0.05       # 光心 → 车平台面 高度差(米, 正值)
 
-MediaManager.init() #初始化media资源管理器
+# 帧: [AA][55][y:4B][tz:4B][d1:4B][chk:1B] = 15字节
+def send_frame(y, tz, d1):
+    payload = struct.pack('<fff', y, tz, d1)
+    chk = 0
+    for b in payload:
+        chk ^= b
+    uart.write(bytes([0xAA, 0x55]) + payload + bytes([chk]))
 
-sensor.run() #启动sensor
+def degree(r):
+    return (180 * r) / math.pi
+def degrees(r):
+    return math.degrees(math.atan2(math.sin(r), math.cos(r)))
 
-clock = time.clock()
+sensor = None
+try:
+    sensor = Sensor(width=DETECT_WIDTH, height=DETECT_HEIGHT)
+    sensor.reset()
+    sensor.set_framesize(width=DETECT_WIDTH, height=DETECT_HEIGHT)
+    sensor.set_pixformat(Sensor.GRAYSCALE)
+    #Display.init(Display.ST7701, to_ide=False)
+    Display.init(Display.VIRT, width=DETECT_WIDTH, height=DETECT_HEIGHT, fps=60, to_ide=True)
+    sensor.run()
 
-while True:
+    fps = time.clock()
+    while True:
+        fps.tick()
+        os.exitpoint()
+        img = sensor.snapshot()
 
-    ################
-    ## 这里编写代码 ##
-    ################
-    clock.tick()
+        for tag in img.find_apriltags(fx=f_x, fy=f_y, cx=c_x, cy=c_y):
+            img.draw_rectangle([v for v in tag.rect()], color=(255, 0, 0))
+            img.draw_cross(tag.cx(), tag.cy(), color=(0, 255, 0))
 
-    img = sensor.snapshot() #拍摄一张图
+            tx = tag.x_translation() * SIZE          # 左右
+            ty = tag.y_translation() * SIZE          # 上下(y 正=上)
+            tz = -tag.z_translation() * SIZE         # 距离
+            h_code = ty                              # 码高度(上为正)
+            h_platform = h_code - SIZE - D3          # 平台高度
+            d1 = h_platform + D2                     # 高度差
 
-    Display.show_image(img) #显示图片
+            rx = degree(tag.x_rotation()) - 180
+            ry = degrees(tag.y_rotation())
+            rz = degrees(tag.z_rotation())
 
-    print(clock.fps()) #打印FPS
+            send_frame(ty, tz, d1)                   # ★ 发 y, tz, d1
+            print("y:%.3f tz:%.3f d1:%.4f" % (ty, tz, d1))   # 不要就注释
+            print("ID:%d  Tx:%.3f Ty:%.3f Tz:%.3f  Rx:%.2f Ry:%.2f Rz:%.2f"
+                  % (tag.id(), tx, ty, tz, rx, ry, rz))
+
+        Display.show_image(img)
+        gc.collect()
+        print(fps.fps())
+except KeyboardInterrupt:
+    print("user stop")
+except BaseException as e:
+    print("Exception '%s'" % e)
+finally:
+    if isinstance(sensor, Sensor):
+        sensor.stop()
+    Display.deinit()
+    os.exitpoint(os.EXITPOINT_ENABLE_SLEEP)
+    time.sleep_ms(100)
